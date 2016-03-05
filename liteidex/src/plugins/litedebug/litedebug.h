@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -30,6 +30,7 @@
 #include "litebuildapi/litebuildapi.h"
 #include "liteeditorapi/liteeditorapi.h"
 #include "textoutput/textoutput.h"
+#include "processex/processex.h"
 
 class DebugManager;
 class DebugWidget;
@@ -65,6 +66,7 @@ public slots:
     void currentEditorChanged(LiteApi::IEditor*);
     void startDebugExternal();
     virtual void startDebug();
+    virtual void startDebugTests();
     virtual void continueRun();
     virtual void runToLine();
     virtual void stopDebug();
@@ -82,8 +84,10 @@ protected slots:
     void debugStarted();
     void debugStoped();
     void setCurrentLine(const QString &fileName, int line);
+    void debugCmdInput();
 protected:
     void clearLastLine();
+    bool m_bLastDebugCmdInput;
     LiteApi::IApplication *m_liteApp;
     LiteApi::IEnvManager *m_envManager;
     LiteApi::ILiteBuild *m_liteBuild;    
@@ -96,6 +100,7 @@ protected:
     QAction      *m_outputAct;
     QAction *m_startDebugExternal;
     QAction *m_startDebugAct;
+    QAction *m_startDebugTestAct;
     QAction *m_stopDebugAct;
     QAction *m_showLineAct;
     QAction *m_stepIntoAct;

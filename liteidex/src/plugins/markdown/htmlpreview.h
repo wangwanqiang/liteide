@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -41,6 +41,7 @@ public slots:
     QByteArray loadCssData(const QString &fileName);
     void currentEditorChanged(LiteApi::IEditor*);
     void contentsChanged();
+    void htmlUpdate();
     void scrollValueChanged();
     void syncScrollValue();
     void toggledSyncSwitch(bool);
@@ -55,6 +56,7 @@ public slots:
     void linkClicked(const QUrl &);
     void linkHovered(const QUrl &);
     void loadFinished(bool);
+    void htmlContentsSizeChanged();
 protected:
     LiteApi::IApplication *m_liteApp;
     QWidget               *m_widget;
@@ -63,7 +65,6 @@ protected:
     QAction     *m_exportHtmlAct;
     QAction     *m_exportPdfAct;
     QAction     *m_printPreviewAct;
-    QAction     *m_configAct;
     QAction     *m_syncScrollAct;
     QAction     *m_syncSwitchAct;
     QMenu       *m_cssMenu;
@@ -80,6 +81,7 @@ protected:
     QByteArray  m_lastData;
     QByteArray  m_head;
     QPoint      m_prevPos;
+    QTimer      *m_htmlUpdateTimer;
 };
 
 #endif // HTMLPREVIEW_H

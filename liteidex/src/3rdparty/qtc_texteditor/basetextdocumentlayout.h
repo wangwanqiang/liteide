@@ -37,6 +37,7 @@
 #include "texteditor_global.h"
 
 #include "itexteditor.h"
+#include "tabsettings.h"
 
 #include <QTextBlockUserData>
 #include <QPlainTextDocumentLayout>
@@ -45,6 +46,13 @@ namespace TextEditor {
 
 struct Parenthesis;
 typedef QVector<Parenthesis> Parentheses;
+
+struct SyntaxToken
+{
+    int offset;
+    int count;
+    int id;
+};
 
 struct TEXTEDITOR_EXPORT Parenthesis
 {
@@ -75,6 +83,7 @@ public:
           m_lexerState(0),
           m_foldingStartIncluded(false),
           m_foldingEndIncluded(false),
+          m_findExpressionMark(false),
           m_codeFormatterData(0)
     {}
     ~TextBlockUserData();
@@ -133,11 +142,13 @@ public:
     inline bool foldingEndIncluded() const { return m_foldingEndIncluded; }
     inline int lexerState() const { return m_lexerState; }
     inline void setLexerState(int state) {m_lexerState = state; }
-
+    inline void setFindExpressionMark(bool b) { m_findExpressionMark = b; }
+    inline bool isFindExpressionMark() { return m_findExpressionMark; }
 
     CodeFormatterData *codeFormatterData() const { return m_codeFormatterData; }
     void setCodeFormatterData(CodeFormatterData *data);
-
+    void setTokens(const QList<SyntaxToken> &tokens) {m_tokens = tokens; }
+    QList<SyntaxToken> tokens() const { return m_tokens; }
 private:
     TextMarks m_marks;
     uint m_folded : 1;
@@ -146,8 +157,10 @@ private:
     uint m_lexerState : 4;
     uint m_foldingStartIncluded : 1;
     uint m_foldingEndIncluded : 1;
+    uint m_findExpressionMark:1;
     Parentheses m_parentheses;
     QMap<int,bool> m_spellCheckZones;
+    QList<SyntaxToken> m_tokens;
     CodeFormatterData *m_codeFormatterData;
 };
 
@@ -180,6 +193,7 @@ public:
     static void doFoldOrUnfold(const QTextBlock& block, bool unfold);
     static bool isFolded(const QTextBlock &block);
     static void setFolded(const QTextBlock &block, bool folded);
+    static bool isFindExpressionMark(const QTextBlock &block);
 
     static TextBlockUserData *testUserData(const QTextBlock &block) {
         return static_cast<TextBlockUserData*>(block.userData());
@@ -191,17 +205,33 @@ public:
         return data;
     }
 
+    class TEXTEDITOR_EXPORT FoldValidator
+    {
+    public:
+        FoldValidator();
 
+        void setup(BaseTextDocumentLayout *layout);
+        void reset();
+        void process(QTextBlock block);
+        void finalize();
+        bool requestDocUpdate() const { return m_requestDocUpdate; }
+    private:
+        BaseTextDocumentLayout *m_layout;
+        bool m_requestDocUpdate;
+        int m_insideFold;
+    };
+
+public:
     void emitDocumentSizeChanged() { emit documentSizeChanged(documentSize()); }
+    void setRequiredWidth(int width);
+    QSizeF documentSize() const;
+public:
     int lastSaveRevision;
     bool hasMarks;
     double maxMarkWidthFactor;
 
     int m_requiredWidth;
-    void setRequiredWidth(int width);
-
-    QSizeF documentSize() const;
-
+    TabSettings m_tabSettings;
 };
 
 } // namespace TextEditor

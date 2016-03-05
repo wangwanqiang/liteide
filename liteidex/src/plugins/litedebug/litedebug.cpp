@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -69,16 +69,14 @@ LiteDebug::LiteDebug(LiteApi::IApplication *app, QObject *parent) :
 
     m_output = new TextOutput(m_liteApp);
     m_output->setReadOnly(true);
-    m_output->setMaxLine(2048);
 
     QAction *clearAct = new QAction(tr("Clear"),this);
     clearAct->setIcon(QIcon("icon:images/cleanoutput.png"));
-
     connect(clearAct,SIGNAL(triggered()),m_output,SLOT(clear()));
 
     QVBoxLayout *layout = new QVBoxLayout;    
     QToolBar *widgetToolBar = new QToolBar;
-    widgetToolBar->setIconSize(LiteApi::getToolBarIconSize());
+    widgetToolBar->setIconSize(LiteApi::getToolBarIconSize(m_liteApp));
     layout->setMargin(0);
     layout->setSpacing(0);
 
@@ -105,9 +103,11 @@ LiteDebug::LiteDebug(LiteApi::IApplication *app, QObject *parent) :
     m_startDebugExternal = new QAction(tr("Start Debugging External Application..."),this);
     actionContext->regAction(m_startDebugExternal,"StartDebugExternal","");
 
-
     m_startDebugAct = new QAction(QIcon("icon:litedebug/images/startdebug.png"),tr("Start Debugging"),this);
     actionContext->regAction(m_startDebugAct,"StartDebug","F5");
+
+    m_startDebugTestAct = new QAction(QIcon("icon:litedebug/images/startdebug.png"),tr("Start Debugging Tests"),this);
+    actionContext->regAction(m_startDebugTestAct,"StartDebugTests","F6");
 
 
     m_continueAct = new QAction(QIcon("icon:litedebug/images/continue.png"),tr("Continue"),this);
@@ -141,6 +141,8 @@ LiteDebug::LiteDebug(LiteApi::IApplication *app, QObject *parent) :
 //    m_toolBar->addAction(m_startDebugAct);
 //    m_toolBar->addAction(m_insertBreakAct);
 
+    m_bLastDebugCmdInput = false;
+
     widgetToolBar->addAction(m_continueAct);
     widgetToolBar->addAction(m_stopDebugAct);
     widgetToolBar->addSeparator();
@@ -156,6 +158,7 @@ LiteDebug::LiteDebug(LiteApi::IApplication *app, QObject *parent) :
     m_debugMenu->addAction(m_startDebugExternal);
     m_debugMenu->addSeparator();
     m_debugMenu->addAction(m_startDebugAct);
+    m_debugMenu->addAction(m_startDebugTestAct);
     m_debugMenu->addAction(m_continueAct);
     m_debugMenu->addAction(m_stopDebugAct);
     m_debugMenu->addSeparator();
@@ -170,6 +173,8 @@ LiteDebug::LiteDebug(LiteApi::IApplication *app, QObject *parent) :
 
     connect(m_startDebugExternal,SIGNAL(triggered()),this,SLOT(startDebugExternal()));
     connect(m_startDebugAct,SIGNAL(triggered()),this,SLOT(startDebug()));
+    connect(m_startDebugTestAct,SIGNAL(triggered()),this,SLOT(startDebugTests()));
+
     connect(m_continueAct,SIGNAL(triggered()),this,SLOT(continueRun()));
     connect(m_runToLineAct,SIGNAL(triggered()),this,SLOT(runToLine()));
     connect(m_stopDebugAct,SIGNAL(triggered()),this,SLOT(stopDebug()));
@@ -183,6 +188,7 @@ LiteDebug::LiteDebug(LiteApi::IApplication *app, QObject *parent) :
     connect(m_liteApp->editorManager(),SIGNAL(editorAboutToClose(LiteApi::IEditor*)),this,SLOT(editorAboutToClose(LiteApi::IEditor*)));
     connect(m_liteApp->editorManager(),SIGNAL(currentEditorChanged(LiteApi::IEditor*)),this,SLOT(currentEditorChanged(LiteApi::IEditor*)));
     connect(m_output,SIGNAL(enterText(QString)),this,SLOT(enterAppInputText(QString)));
+    connect(m_dbgWidget,SIGNAL(debugCmdInput()),this,SLOT(debugCmdInput()));
 
     m_outputAct = m_liteApp->toolWindowManager()->addToolWindow(
                 Qt::BottomDockWidgetArea,m_output,"debugoutput",tr("Debug Output"),false,
@@ -242,7 +248,7 @@ void LiteDebug::editorCreated(LiteApi::IEditor *editor)
     QString filePath = editor->filePath();
     bool ok;
     m_fileBpMap.remove(filePath);
-    foreach(QString bp, m_liteApp->settings()->value(QString("bp_%1").arg(filePath)).toStringList()) {
+    foreach(QString bp, m_liteApp->globalCookie().value(QString("bp_%1").arg(filePath)).toStringList()) {
         int i = bp.toInt(&ok);
         if (ok) {
             editorMark->addMark(i,LiteApi::BreakPointMark);
@@ -253,7 +259,7 @@ void LiteDebug::editorCreated(LiteApi::IEditor *editor)
         editorMark->addMark(m_lastLine.line,LiteApi::CurrentLineMark);
     }
 
-    QToolBar *toolBar = LiteApi::findExtensionObject<QToolBar*>(editor,"LiteApi.QToolBar");
+    QToolBar *toolBar = LiteApi::getEditToolBar(editor);
     if (toolBar) {
         toolBar->addSeparator();
         toolBar->addAction(m_switchBreakAct);
@@ -276,7 +282,7 @@ void LiteDebug::editorAboutToClose(LiteApi::IEditor *editor)
     foreach(int bp, bpList) {
         save.append(QString("%1").arg(bp));
     }
-    m_liteApp->settings()->setValue(QString("bp_%1").arg(editor->filePath()),save);
+    m_liteApp->globalCookie().insert(QString("bp_%1").arg(editor->filePath()),save);
 }
 
 void LiteDebug::currentEditorChanged(IEditor *editor)
@@ -290,11 +296,13 @@ void LiteDebug::currentEditorChanged(IEditor *editor)
 
 void LiteDebug::startDebugExternal()
 {
-    SelectExternalDialog dlg;
+    SelectExternalDialog dlg(m_liteApp);
+    dlg.loadSetting();
     if (dlg.exec() == QDialog::Accepted) {
         QString cmd = dlg.getCmd();
         QString args = dlg.getArgs();
         QString work = dlg.getWork();
+        dlg.saveSetting();
         this->startDebug(cmd,args,work);
     }
 }
@@ -335,7 +343,7 @@ void LiteDebug::startDebug(const QString &cmd, const QString &args, const QStrin
             continue;
         }
         m_fileBpMap.remove(filePath);
-        foreach(QString bp,m_liteApp->settings()->value(QString("bp_%1").arg(filePath)).toStringList()) {
+        foreach(QString bp,m_liteApp->globalCookie().value(QString("bp_%1").arg(filePath)).toStringList()) {
             int i = bp.toInt(&ok);
             if (ok && i >= 0) {
                 m_fileBpMap.insert(filePath,i);
@@ -356,7 +364,7 @@ void LiteDebug::startDebug(const QString &cmd, const QString &args, const QStrin
     }
 
     m_debugger->setInitBreakTable(m_fileBpMap);
-    m_debugger->setEnvironment(m_envManager->currentEnvironment().toStringList());
+    m_debugger->setEnvironment(LiteApi::getGoEnvironment(m_liteApp).toStringList());
     m_debugger->setWorkingDirectory(work);
     if (!m_debugger->start(cmd,args)) {
         m_liteApp->appendLog("LiteDebug","Failed to start debugger",true);
@@ -415,6 +423,41 @@ void LiteDebug::debugLog(LiteApi::DEBUG_LOG_TYPE type, const QString &log)
         m_output->append(log);
         break;
     }
+}
+
+void LiteDebug::startDebugTests()
+{
+    if (!m_debugger) {
+        return;
+    }
+    if (m_debugger->isRunning()) {
+        m_debugger->continueRun();
+        return;
+    }
+
+    if (!m_liteBuild) {
+        return;
+    }
+
+    LiteApi::IEditor *editor = m_liteApp->editorManager()->currentEditor();
+    if (editor) {
+        m_startDebugFile = editor->filePath();
+    }
+
+    if(!m_liteBuild->buildTests())
+    {
+    	m_liteApp->appendLog("LiteDebug","Build tests failed",true);
+    }
+    LiteApi::TargetInfo info = m_liteBuild->getTargetInfo();
+
+    QString testCmd = info.cmd+".test";
+    QString findCmd = FileUtil::lookPathInDir(testCmd,info.workDir);
+
+    if (!findCmd.isEmpty()) {
+        testCmd = QFileInfo(findCmd).fileName();
+    }
+
+	this->startDebug(testCmd,info.args,info.workDir);
 }
 
 void LiteDebug::startDebug()
@@ -517,13 +560,14 @@ void LiteDebug::showLine()
     if (m_lastLine.fileName.isEmpty()) {
         return;
     }
-    LiteApi::IEditor *editor = m_liteApp->fileManager()->openEditor(m_lastLine.fileName,true);
-    if (editor) {
-        LiteApi::ITextEditor *textEditor = LiteApi::findExtensionObject<LiteApi::ITextEditor*>(editor,"LiteApi.ITextEditor");
-        if (textEditor) {
-            textEditor->gotoLine(m_lastLine.line,0,true);
-        }
-    }
+    LiteApi::gotoLine(m_liteApp,m_lastLine.fileName,m_lastLine.line,0,true,true);
+//    LiteApi::IEditor *editor = m_liteApp->fileManager()->openEditor(m_lastLine.fileName,true);
+//    if (editor) {
+//        LiteApi::ITextEditor *textEditor = LiteApi::findExtensionObject<LiteApi::ITextEditor*>(editor,"LiteApi.ITextEditor");
+//        if (textEditor) {
+//            textEditor->gotoLine(m_lastLine.line,0,true);
+//        }
+//    }
 }
 
 void LiteDebug::removeAllBreakPoints()
@@ -671,6 +715,15 @@ void LiteDebug::setCurrentLine(const QString &fileName, int line)
             }
         }
     }
+    if (m_bLastDebugCmdInput) {
+        m_bLastDebugCmdInput = false;
+        m_dbgWidget->setInputFocus();
+    }
+}
+
+void LiteDebug::debugCmdInput()
+{
+    m_bLastDebugCmdInput = true;
 }
 
 void LiteDebug::enterAppInputText(QString text)

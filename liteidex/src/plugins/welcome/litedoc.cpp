@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -34,6 +34,7 @@
 #include <QDir>
 #include <QPlainTextEdit>
 #include <QDesktopServices>
+#include <QApplication>
 #include <QStatusBar>
 #include <QComboBox>
 #include <QUrl>
@@ -51,6 +52,8 @@
 #endif
 //lite_memory_check_end
 
+
+
 LiteDoc::LiteDoc(LiteApi::IApplication *app, QObject *parent) :
     LiteApi::ILiteDoc(parent),
     m_liteApp(app)
@@ -59,26 +62,55 @@ LiteDoc::LiteDoc(LiteApi::IApplication *app, QObject *parent) :
     m_docBrowser->urlComboBox()->setEditable(false);
     m_docBrowser->setName(tr("LiteIDE Documentation"));
     QStringList paths;
-    paths << m_liteApp->resourcePath()+"/welcome";
+    paths << m_liteApp->resourcePath()+"/welcome" << localePath(m_liteApp->resourcePath()+"/welcome");
     m_docBrowser->setSearchPaths(paths);
 
     m_browserAct = m_liteApp->editorManager()->registerBrowser(m_docBrowser);
-    m_liteApp->actionManager()->insertViewMenu(LiteApi::ViewMenuBrowserPos,m_browserAct);
+    //m_liteApp->actionManager()->insertViewMenu(LiteApi::ViewMenuBrowserPos,m_browserAct);
 
     connect(m_docBrowser,SIGNAL(requestUrl(QUrl)),this,SLOT(openUrl(QUrl)));
     connect(m_docBrowser,SIGNAL(linkHovered(QUrl)),this,SLOT(highlighted(QUrl)));
 
-    QString path = m_liteApp->resourcePath()+"/welcome/doc.html";
+    QString path = localeFile(m_liteApp->resourcePath()+"/welcome/liteide.html");
     QFile file(path);
     if (file.open(QIODevice::ReadOnly)) {
-        m_templateData = file.readAll();
+        m_templateData = QString::fromUtf8(file.readAll());
         file.close();
     }
 
     m_liteApp->extension()->addObject("LiteApi.ILiteDoc",this);    
+}
 
-    QUrl url("/readme.html");
-    openUrl(url);
+static QString getAppLocale()
+{
+    return qApp->property("liteide_locale").toString();
+}
+
+QString LiteDoc::localeFile(const QString &fileName)
+{
+    QString locale = getAppLocale();
+    if (locale.isEmpty()) {
+        locale = "en";
+    }
+    QFileInfo info(fileName);
+    QString path = info.absolutePath()+"/"+locale+"/"+info.fileName();
+    if (QFileInfo(path).exists()) {
+        return path;
+    }
+    return info.absolutePath()+"/en/"+info.fileName();;
+}
+
+QString LiteDoc::localePath(const QString &path)
+{
+    QString locale = getAppLocale();
+    if (locale.isEmpty()) {
+        locale = "en";
+    }
+    QDir dir(path+"/"+locale);
+    if (dir.exists()) {
+        return dir.path();
+    }
+    return path+"/en";
 }
 
 void LiteDoc::activeBrowser()
@@ -88,7 +120,7 @@ void LiteDoc::activeBrowser()
 
 QUrl LiteDoc::parserUrl(const QUrl &_url)
 {
-    QDir root(m_liteApp->resourcePath()+"/welcome");
+    QDir root(localePath(m_liteApp->resourcePath()+"/welcome"));
     QUrl url = _url;
     if (url.isRelative() && !url.path().isEmpty()) {
         QFileInfo info;

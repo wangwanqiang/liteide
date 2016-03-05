@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -33,6 +33,7 @@ using namespace LiteApi;
 class LiteTabWidget;
 class QStackedWidget;
 class QToolButton;
+class QLabel;
 
 struct EditLocation {
     QString filePath;
@@ -55,24 +56,28 @@ public:
 public:
     virtual QWidget *widget();
     virtual IEditor *currentEditor() const;
-    virtual void setCurrentEditor(IEditor *editor);
+    virtual void setCurrentEditor(IEditor *editor, bool ignoreNavigationHistory = false);
     virtual IEditor *findEditor(const QString &fileName, bool canonical) const;
     virtual QList<IEditor*> editorList() const;
     virtual QAction *registerBrowser(IEditor *editor);
     virtual void activeBrowser(IEditor *editor);
-    virtual void addNavigationHistory(IEditor *editor,const QByteArray &saveState);
+    virtual void addNavigationHistory(IEditor *editor = 0,const QByteArray &saveState = QByteArray());
     virtual void cutForwardNavigationHistory();
     virtual void loadColorStyleScheme(const QString &file);
     virtual const ColorStyleScheme *colorStyleScheme() const;
+    virtual void addEditContext(IEditContext *context);
+    virtual void removeEditContext(IEditContext *context);
+    virtual void updateEditInfo(const QString &info);
 protected:
     void addEditor(IEditor *editor);
     bool eventFilter(QObject *target, QEvent *event);
+    QString tabContextFilePath() const;
 public:
     QList<IEditor*> sortedEditorList() const;
 public slots:
     virtual bool saveEditor(IEditor *editor = 0, bool emitAboutSave = true);
     virtual bool saveEditorAs(IEditor *editor = 0);
-    virtual bool saveAllEditors();
+    virtual bool saveAllEditors(bool emitAboutSave = true);
     virtual bool closeEditor(IEditor *editor = 0);
     virtual bool closeAllEditors();
     void tabContextClose();
@@ -82,11 +87,14 @@ public slots:
     void tabContextCloseAll();
     void tabContextCloseOtherFolderFiles();
     void tabContextCloseSameFolderFiles();
+    void tabContextCopyPathToClipboard();
+    void tabContextShowInExplorer();
     void goBack();
     void goForward();
     void updateNavigatorActions();
     void updateCurrentPositionInNavigationHistory();
     void moveToNewWindow();
+    void focusChanged(QWidget *old,QWidget *now);
 signals:
     void tabAddRequest();
     void doubleClickedTab();
@@ -105,13 +113,16 @@ protected:
     QPointer<IEditor> m_currentEditor;
     QList<IEditorFactory*>    m_factoryList;
     QMap<IEditor*,QAction*>   m_browserActionMap;
+    QMap<QWidget*,IEditContext*> m_editContextMap;
     QAction     *m_goBackAct;
     QAction     *m_goForwardAct;
-    QAction     *m_editToolbarAct;
+    //QAction     *m_editToolbarAct;
     QMenu       *m_editMenu;
-    QMenu       *m_tabContextMenu;
+    QMenu       *m_tabContextFileMenu;
+    QMenu       *m_tabContextNofileMenu;
     ColorStyleScheme *m_colorStyleScheme;
     int          m_tabContextIndex;
+    QLabel      *m_lineInfo;
 };
 
 #endif // EDITORMANAGER_H

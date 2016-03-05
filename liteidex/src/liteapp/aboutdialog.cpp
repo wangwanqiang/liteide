@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -33,13 +33,14 @@
 #endif
 //lite_memory_check_end
 
-
 AboutDialog::AboutDialog(LiteApi::IApplication *app,QWidget *parent) :
     QDialog(parent),
     ui(new Ui::AboutDialog)
 {
     ui->setupUi(this);
     ui->verLabel->setText(app->ideVersion());
+    ui->qtVerLabel->setText(QString(tr("Based on Qt %1 (%2 bit)")).arg(QLatin1String(qVersion())).
+                            arg(QString::number(QSysInfo::WordSize)));
 }
 
 AboutDialog::~AboutDialog()

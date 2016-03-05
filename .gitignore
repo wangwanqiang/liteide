@@ -9,6 +9,10 @@
 *.so
 *.dll
 *.dylib
+*.7z
+
+#Emacs
+*~
 
 # Qt-es
 
@@ -24,6 +28,8 @@ Makefile
 
 #liteide
 *.exe
-build*
+liteidex/bin
 liteidex/liteide
+liteidex/src/github.com
+liteidex/src/golang.org/
 

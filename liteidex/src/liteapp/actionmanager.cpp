@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -48,7 +48,7 @@ ActionManager::ActionManager(QObject *parent) :
 
 ActionManager::~ActionManager()
 {
-    QMapIterator<QObject*,ActionContext*> it(m_objContextMap);
+    QMapIterator<QObject*,IActionContext*> it(m_objContextMap);
     while(it.hasNext()) {
         it.next();
         delete it.value();
@@ -66,7 +66,6 @@ bool ActionManager::initWithApp(IApplication *app)
     insertMenu("menu/edit",tr("&Edit"));
     insertMenu("menu/find",tr("F&ind"));
     m_viewMenu = insertMenu("menu/view",tr("&View"));
-    m_viewToolMenu = m_viewMenu->addMenu(tr("Tool Windows"));
     m_viewMenu->addSeparator();
     m_baseToolBarAct = m_viewMenu->addSeparator();
     m_baseBrowserAct = m_viewMenu->addSeparator();
@@ -131,7 +130,7 @@ QToolBar *ActionManager::insertToolBar(const QString &id, const QString &title, 
     }
     toolBar = new QToolBar(title, m_liteApp->mainWindow());
     toolBar->setObjectName(id);
-    toolBar->setIconSize(LiteApi::getToolBarIconSize());
+    toolBar->setIconSize(LiteApi::getToolBarIconSize(m_liteApp));
 
     QToolBar *m = 0;
     if (!idBefore.isEmpty()) {
@@ -151,7 +150,7 @@ void ActionManager::insertToolBar(QToolBar *toolBar, const QString &idBefore)
 {
     QString id = toolBar->objectName();
 
-    toolBar->setIconSize(LiteApi::getToolBarIconSize());
+    toolBar->setIconSize(LiteApi::getToolBarIconSize(m_liteApp));
 
     QToolBar *m = 0;
     if (!idBefore.isEmpty()) {
@@ -191,8 +190,6 @@ void ActionManager::insertViewMenu(VIEWMENU_ACTION_POS pos, QAction *act)
 {
     if (pos == ViewMenuToolBarPos) {
         m_viewMenu->insertAction(m_baseToolBarAct,act);
-    } else if (pos == ViewMenuToolWindowPos) {
-        m_viewToolMenu->addAction(act);
     } else if(pos == ViewMenuBrowserPos){
         m_viewMenu->insertAction(m_baseBrowserAct,act);
     } else {
@@ -202,7 +199,7 @@ void ActionManager::insertViewMenu(VIEWMENU_ACTION_POS pos, QAction *act)
 
 IActionContext *ActionManager::getActionContext(QObject *obj, const QString &name)
 {
-    ActionContext *context = m_objContextMap.value(obj);
+    IActionContext *context = m_objContextMap.value(obj);
     if (!context) {
         context = new ActionContext(m_liteApp,name);
         connect(obj,SIGNAL(destroyed(QObject*)),this,SLOT(removeActionContext(QObject*)));
@@ -214,7 +211,7 @@ IActionContext *ActionManager::getActionContext(QObject *obj, const QString &nam
 QStringList ActionManager::actionKeys() const
 {
     QStringList keys;
-    QMapIterator<QObject*,ActionContext*> it(m_objContextMap);
+    QMapIterator<QObject*,IActionContext*> it(m_objContextMap);
     while(it.hasNext()) {
         it.next();
         keys.append(it.value()->actionKeys());
@@ -225,7 +222,7 @@ QStringList ActionManager::actionKeys() const
 
 ActionInfo *ActionManager::actionInfo(const QString &id) const
 {
-    QMapIterator<QObject*,ActionContext*> it(m_objContextMap);
+    QMapIterator<QObject*,IActionContext*> it(m_objContextMap);
     while (it.hasNext()) {
         it.next();
         ActionInfo *info = it.value()->actionInfo(id);
@@ -283,7 +280,7 @@ QString ActionManager::formatShortcutsString(const QString &ks)
 
 void ActionManager::setActionShourtcuts(const QString &id, const QString &shortcuts)
 {
-    QMapIterator<QObject*,ActionContext*> it(m_objContextMap);
+    QMapIterator<QObject*,IActionContext*> it(m_objContextMap);
     while(it.hasNext()) {
         it.next();
         it.value()->setActionShourtcuts(id,shortcuts);
@@ -293,7 +290,7 @@ void ActionManager::setActionShourtcuts(const QString &id, const QString &shortc
 QStringList ActionManager::actionContextNameList() const
 {
     QStringList nameList;
-    QMapIterator<QObject*,ActionContext*> it(m_objContextMap);
+    QMapIterator<QObject*,IActionContext*> it(m_objContextMap);
     while(it.hasNext()) {
         it.next();
         nameList.append(it.value()->contextName());
@@ -304,7 +301,7 @@ QStringList ActionManager::actionContextNameList() const
 
 IActionContext *ActionManager::actionContextForName(const QString &name)
 {
-    QMapIterator<QObject*,ActionContext*> it(m_objContextMap);
+    QMapIterator<QObject*,IActionContext*> it(m_objContextMap);
     while(it.hasNext()) {
         it.next();
         if (it.value()->contextName().compare(name,Qt::CaseInsensitive) == 0) {
@@ -316,7 +313,7 @@ IActionContext *ActionManager::actionContextForName(const QString &name)
 
 void ActionManager::removeActionContext(QObject *obj)
 {
-    QMutableMapIterator<QObject*,ActionContext*> it(m_objContextMap);
+    QMutableMapIterator<QObject*,IActionContext*> it(m_objContextMap);
     while (it.hasNext()) {
         it.next();
         if (it.key() == obj) {
@@ -342,13 +339,19 @@ ActionContext::~ActionContext()
     QMapIterator<QString,ActionInfo*> it(m_actionInfoMap);
     while(it.hasNext()) {
         it.next();
-        delete it.value();
+        ActionInfo* info = it.value();
+        delete info;
     }
+    m_actionInfoMap.clear();
 }
 
 void ActionContext::regAction(QAction *act, const QString &id, const QString &defks, bool standard)
 {
-    ActionInfo *info = new ActionInfo;
+    ActionInfo *info = m_actionInfoMap.value(id);
+    if (info == 0) {
+        info = new ActionInfo;
+        m_actionInfoMap.insert(id,info);
+    }
     info->standard = standard;
     info->defks = ActionManager::formatShortcutsString(defks);
     info->ks = m_liteApp->settings()->value(LITEAPP_SHORTCUTS+id,info->defks).toString();
@@ -361,8 +364,9 @@ void ActionContext::regAction(QAction *act, const QString &id, const QString &de
             act->setToolTip(QString("%1 (%2)").arg(act->text()).arg(info->ks));
         }
         info->action = act;
+    } else {
+        info->action = 0;
     }
-    m_actionInfoMap.insert(id,info);
 }
 
 void ActionContext::regAction(QAction *act, const QString &id, const QKeySequence::StandardKey &def)

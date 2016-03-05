@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -23,6 +23,7 @@
 
 #include "gdbdebuggerplugin.h"
 #include "gdbdebugger.h"
+#include "gdbdebuggeroptionfactory.h"
 #include "litedebugapi/litedebugapi.h"
 //lite_memory_check_begin
 #if defined(WIN32) && defined(_MSC_VER) &&  defined(_DEBUG)
@@ -47,7 +48,7 @@ bool GdbDebuggerPlugin::load(LiteApi::IApplication *app)
     GdbDebugger *debug = new GdbDebugger(app);
     manager->addDebugger(debug);
     manager->setCurrentDebugger(debug);
-
+    app->optionManager()->addFactory(new GdbDebuggerOptionFactory(app,this));
     return true;
 }
 

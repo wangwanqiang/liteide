@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -41,8 +41,10 @@ struct FileUtil
     static QString canExec(QString file, QStringList exts = QStringList());
     static QString lookPath(const QString &fileName,const QProcessEnvironment &env, bool bLocalPriority);
     static QString lookPathInDir(const QString &fileName,const QString &dir);
-    static QString lookupGoBin(const QString &bin, LiteApi::IApplication *app);
+    static QString lookupGoBin(const QString &bin, LiteApi::IApplication *app, bool bLiteAppPriority);
     static QString lookupLiteBin(const QString &bin, LiteApi::IApplication *app);
+    static bool CopyDirectory(const QString &src, const QString &dest);
+    static void openInExplorer(const QString &path);
 };
 
 struct GoExecute

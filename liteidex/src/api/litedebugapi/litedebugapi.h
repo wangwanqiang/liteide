@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -79,6 +79,7 @@ public:
     virtual void createWatch(const QString &var, bool floating, bool watchModel = false) = 0;
     virtual void removeWatch(const QString &var, bool children) = 0;
     virtual void removeWatchByName(const QString &name, bool children) = 0;
+    virtual void showFrame(QModelIndex index) = 0;
 signals:
     void debugStarted();
     void debugStoped();
@@ -120,6 +121,7 @@ public:
 public:
     virtual IDebuggerManager *debugManager() const = 0;
     virtual void startDebug(const QString &cmd, const QString &args, const QString &work) = 0;
+    virtual void startDebugTests() = 0;
     virtual bool isRunning() const = 0;
 public slots:
     virtual void continueRun() = 0;

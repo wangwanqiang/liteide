@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -35,15 +35,16 @@
 #endif
 //lite_memory_check_end
 
-SelectExternalDialog::SelectExternalDialog(QWidget *parent) :
+SelectExternalDialog::SelectExternalDialog(LiteApi::IApplication *app, QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::SelectExternalDialog)
+    m_liteApp(app),ui(new Ui::SelectExternalDialog)
 {
     ui->setupUi(this);
 }
 
 SelectExternalDialog::~SelectExternalDialog()
 {
+
     delete ui;
 }
 
@@ -60,6 +61,20 @@ QString SelectExternalDialog::getArgs() const
 QString SelectExternalDialog::getWork() const
 {
     return ui->workLineEdit->text();
+}
+
+void SelectExternalDialog::loadSetting()
+{
+    ui->cmdLineEdit->setText(m_liteApp->settings()->value("litedebug/external/cmd").toString());
+    ui->argsLineEdit->setText(m_liteApp->settings()->value("litedebug/external/args").toString());
+    ui->workLineEdit->setText(m_liteApp->settings()->value("litedebug/external/work").toString());
+}
+
+void SelectExternalDialog::saveSetting()
+{
+    m_liteApp->settings()->setValue("litedebug/external/cmd",getCmd());
+    m_liteApp->settings()->setValue("litedebug/external/args",getArgs());
+    m_liteApp->settings()->setValue("litedebug/external/work",getWork());
 }
 
 void SelectExternalDialog::on_cmbPushButton_clicked()

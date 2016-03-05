@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -22,6 +22,7 @@
 // Creator: visualfc <visualfc@gmail.com>
 
 #include "golangfmtoption.h"
+#include "golangfmt_global.h"
 #include "ui_golangfmtoption.h"
 //lite_memory_check_begin
 #if defined(WIN32) && defined(_MSC_VER) &&  defined(_DEBUG)
@@ -41,20 +42,16 @@ GolangFmtOption::GolangFmtOption(LiteApi::IApplication *app,QObject *parent) :
 {
     ui->setupUi(m_widget);
 
-    bool diff = m_liteApp->settings()->value("golangfmt/diff",true).toBool();
-    bool autofmt = m_liteApp->settings()->value("golangfmt/autofmt",true).toBool();
-    bool autopop = m_liteApp->settings()->value("golangfmt/autopop",false).toBool();
-    int timeout = m_liteApp->settings()->value("golangfmt/timeout",600).toInt();
-    if (!diff) {
-        autofmt = false;
-    }
-    ui->checkBoxDiff->setChecked(diff);
+    bool fixImports = m_liteApp->settings()->value(GOLANGFMT_FIXIMPORTS,false).toBool();
+    bool sortImports = m_liteApp->settings()->value(GOLANGFMT_SORTIMPORTS,true).toBool();
+    bool autofmt = m_liteApp->settings()->value(GOLANGFMT_AUTOFMT,true).toBool();
+    bool syncfmt = m_liteApp->settings()->value(GOLANGFMT_USESYNCFMT,true).toBool();
+    int timeout = m_liteApp->settings()->value(GOLANGFMT_SYNCTIMEOUT,500).toInt();
+    ui->checkBoxUseGoimports->setChecked(fixImports);
+    ui->checkBoxSortImports->setChecked(sortImports);
     ui->checkBoxAutoFmt->setChecked(autofmt);
-    ui->checkBoxAutoPopMessage->setChecked(autopop);
-    ui->timeoutLineEdit->setText(QString("%1").arg(timeout));
-
-    connect(ui->checkBoxDiff,SIGNAL(toggled(bool)),ui->checkBoxAutoFmt,SLOT(setEnabled(bool)));
-    connect(ui->checkBoxDiff,SIGNAL(clicked(bool)),ui->checkBoxAutoFmt,SLOT(setChecked(bool)));
+    ui->enableSyncCheckBox->setChecked(syncfmt);
+    ui->syncTimeoutLineEdit->setText(QString("%1").arg(timeout));
 }
 
 GolangFmtOption::~GolangFmtOption()
@@ -80,19 +77,18 @@ QString GolangFmtOption::mimeType() const
 
 void GolangFmtOption::apply()
 {
-    bool diff = ui->checkBoxDiff->isChecked();
+    bool goimports = ui->checkBoxUseGoimports->isChecked();
+    bool sortImports = ui->checkBoxSortImports->isChecked();
     bool autofmt = ui->checkBoxAutoFmt->isChecked();
-    bool autopop = ui->checkBoxAutoPopMessage->isChecked();
-    if (!diff) {
-        autofmt = false;
+    bool syncfmt = ui->enableSyncCheckBox->isChecked();
+    m_liteApp->settings()->setValue(GOLANGFMT_FIXIMPORTS,goimports);
+    m_liteApp->settings()->setValue(GOLANGFMT_SORTIMPORTS,sortImports);
+    m_liteApp->settings()->setValue(GOLANGFMT_AUTOFMT,autofmt);
+    m_liteApp->settings()->setValue(GOLANGFMT_USESYNCFMT,syncfmt);
+    int timeout = ui->syncTimeoutLineEdit->text().toInt();
+    if (timeout < 500) {
+        timeout = 500;
     }
-    m_liteApp->settings()->setValue("golangfmt/diff",diff);
-    m_liteApp->settings()->setValue("golangfmt/autofmt",autofmt);
-    m_liteApp->settings()->setValue("golangfmt/autopop",autopop);
-    int timeout = ui->timeoutLineEdit->text().toInt();
-    if (timeout < 50) {
-        timeout = 600;
-    }
-    ui->timeoutLineEdit->setText(QString("%1").arg(timeout));
-    m_liteApp->settings()->setValue("golangfmt/timeout",timeout);
+    ui->syncTimeoutLineEdit->setText(QString("%1").arg(timeout));
+    m_liteApp->settings()->setValue(GOLANGFMT_SYNCTIMEOUT,timeout);
 }

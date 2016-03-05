@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -25,6 +25,7 @@
 #ifdef Q_OS_WIN
 #include "sockettty.h"
 #else
+#include "sockettty.h"
 #include "fifotty.h"
 //lite_memory_check_begin
 #if defined(WIN32) && defined(_MSC_VER) &&  defined(_DEBUG)
@@ -47,7 +48,6 @@ LiteApi::ITty *LiteTty::createTty(QObject *parent) const
 #ifdef Q_OS_WIN
     return new SocketTty(parent);
 #else
-    //return new FiFoTty(parent);
-    return 0;
+    return new FiFoTty(parent);
 #endif
 }

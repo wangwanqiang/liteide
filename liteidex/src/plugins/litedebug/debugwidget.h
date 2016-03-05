@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -40,7 +40,10 @@ public:
     explicit DebugWidget(LiteApi::IApplication *app,QObject *parent = 0);
     virtual ~DebugWidget();
     virtual QWidget *widget();
+signals:
+    void debugCmdInput();
 public slots:
+    void setInputFocus();
     void loadDebugInfo(const QString &id);
     void saveDebugInfo(const QString &id);
     void addWatch();
@@ -56,6 +59,7 @@ public slots:
     void setExpand(LiteApi::DEBUG_MODEL_TYPE type, const QModelIndex &index, bool expanded);
     void watchCreated(QString,QString);
     void watchRemoved(QString);
+    void stackClicked(QModelIndex);
 protected:
     LiteApi::IApplication *m_liteApp;
     QWidget *m_widget;

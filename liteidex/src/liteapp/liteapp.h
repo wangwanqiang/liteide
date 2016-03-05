@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -29,6 +29,7 @@
 #include "extension/extension.h"
 #include "goproxy.h"
 
+
 using namespace LiteApi;
 
 class MainWindow;
@@ -45,6 +46,7 @@ class QSettings;
 class QSplitter;
 class LiteAppOptionFactory;
 
+
 class LiteApp : public IApplication
 {
     Q_OBJECT
@@ -53,7 +55,7 @@ public:
     static QString getPluginPath();
     static QString getResoucePath();
     static QString getStoragePath();
-    static IApplication* NewApplication(bool loadSession);
+    static IApplication* NewApplication(bool loadSession, IApplication *base = 0);
     static PluginManager *pluginManager();
 public:
     LiteApp();    
@@ -95,7 +97,7 @@ public:
     virtual void appendLog(const QString &model, const QString &log = QString(), bool error = false);
     virtual void sendBroadcast(const QString &module, const QString &id, const QString &param = QString());
 public:
-    void load(bool bUseSession);
+    void load(bool bUseSession, IApplication *baseApp);
     void createActions();
     void createMenus();
     void createToolBars();
@@ -105,7 +107,7 @@ public:
     void setPluginPath(const QString &path); 
     void setResourcePath(const QString &path);
 protected slots:
-    void goproxyDone(const QByteArray &id,const QByteArray &reply);
+    void goproxyDone(const QByteArray &reply);
     void dbclickLogOutput(QTextCursor);
     void projectReloaded();
     void currentProjectChanged(LiteApi::IProject *project);
@@ -114,6 +116,10 @@ protected slots:
     void cleanup();
     void aboutPlugins();
     void escape();
+    void newWindow();
+    void closeWindow();
+    void exit();
+    void applyOption(QString id);
 protected:
     QString         m_applicationPath;
     QString         m_pluginPath;
@@ -139,8 +145,10 @@ protected:
     QAction     *m_newAct;
     QAction     *m_openFileAct;
     QAction     *m_openFolderAct;
-    QAction     *m_openFolderNewInstanceAct;
-    QAction     *m_newInstance;
+    QAction     *m_openFolderNewWindowAct;
+    QAction     *m_closeAllFolderAct;
+    QAction     *m_newWindow;
+    QAction     *m_closeWindow;
     QAction     *m_closeAct;
     QAction     *m_closeAllAct;
     QAction     *m_openProjectAct;

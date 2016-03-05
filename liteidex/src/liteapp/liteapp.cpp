@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -40,7 +40,8 @@
 #ifdef Q_OS_MAC
 #include "macsupport.h"
 #endif
-
+#include "splitwindowstyle.h"
+#include "sidewindowstyle.h"
 #include <QApplication>
 #include <QSplashScreen>
 #include <QMenuBar>
@@ -63,6 +64,8 @@
      #define new DEBUG_NEW
 #endif
 //lite_memory_check_end
+
+#define LITEIDE_VERSION "X28"
 
 QString LiteApp::getRootPath()
 {
@@ -101,10 +104,10 @@ QString LiteApp::getStoragePath()
     return root+"/liteide";
 }
 
-IApplication* LiteApp::NewApplication(bool loadSession)
+IApplication* LiteApp::NewApplication(bool loadSession, IApplication *baseApp)
 {
     LiteApp *app = new LiteApp;
-    app->load(loadSession);
+    app->load(loadSession,baseApp);
     return app;
 }
 
@@ -120,21 +123,41 @@ LiteApp::LiteApp()
     : m_applicationPath(QApplication::applicationDirPath()),
       m_pluginPath(LiteApp::getPluginPath()),
       m_resourcePath(LiteApp::getResoucePath()),
-      m_storagePath(LiteApp::getStoragePath()),
-      m_settings(new QSettings(QSettings::IniFormat,QSettings::UserScope,"liteide","liteide",this)),
-      m_extension(new Extension),
-      m_mainwindow(new MainWindow(this)),
-      m_toolWindowManager(new ToolWindowManager),
-      m_htmlWidgetManager(new HtmlWidgetManager),
-      m_actionManager(new ActionManager),
-      m_projectManager(new ProjectManager),
-      m_editorManager(new EditorManager),
-      m_fileManager(new FileManager),
-      m_mimeTypeManager(new MimeTypeManager),
-      m_optionManager(new OptionManager)
+      m_storagePath(LiteApp::getStoragePath())
 {    
+    QSettings global(m_resourcePath+"/liteapp/config/global.ini",QSettings::IniFormat);
+    bool storeLocal = global.value(LITEIDE_STORELOCAL,false).toBool();
+    if (storeLocal) {
+        m_settings = new QSettings(m_resourcePath+"/liteapp/config/liteide.ini", QSettings::IniFormat);
+    } else {
+        m_settings = new QSettings(QSettings::IniFormat,QSettings::UserScope,"liteide","liteide",this);
+    }
+    m_extension = new Extension;
+    m_mainwindow = new MainWindow(this);
+
+    QString style = this->settings()->value(LITEAPP_STYLE,"sidebar").toString();
+    if (style == "splitter") {
+        SplitWindowStyle *style = new SplitWindowStyle(this,m_mainwindow);
+        m_mainwindow->setWindowStyle(style);
+    } else {
+        SideWindowStyle *style = new SideWindowStyle(this,m_mainwindow);
+        m_mainwindow->setWindowStyle(style);
+    }
+
+    m_toolWindowManager = new ToolWindowManager;
+    m_htmlWidgetManager = new HtmlWidgetManager;
+    m_actionManager = new ActionManager;
+    m_projectManager = new ProjectManager;
+    m_editorManager = new EditorManager;
+    m_fileManager = new FileManager;
+    m_mimeTypeManager = new MimeTypeManager;
+    m_optionManager = new OptionManager;
+
     m_goProxy = new GoProxy(this);
     m_actionManager->initWithApp(this);
+
+    m_mainwindow->createToolWindowMenu();
+
     m_toolWindowManager->initWithApp(this);
     m_mimeTypeManager->initWithApp(this);
     m_projectManager->initWithApp(this);
@@ -171,11 +194,12 @@ LiteApp::LiteApp()
     connect(m_editorManager,SIGNAL(doubleClickedTab()),m_mainwindow,SLOT(showOrHideToolWindow()));
     connect(m_optionManager,SIGNAL(applyOption(QString)),m_fileManager,SLOT(applyOption(QString)));
     connect(m_optionManager,SIGNAL(applyOption(QString)),m_projectManager,SLOT(applyOption(QString)));
+    connect(m_optionManager,SIGNAL(applyOption(QString)),this,SLOT(applyOption(QString)));
 
     QAction *esc = new QAction(tr("Escape"),this);
     m_actionManager->getActionContext(this,"App")->regAction(esc,"Escape","ESC");
-    connect(esc,SIGNAL(triggered()),this,SLOT(escape()));
     m_mainwindow->addAction(esc);
+    connect(esc,SIGNAL(triggered()),this,SLOT(escape()));
 
     createActions();
     createMenus();
@@ -187,10 +211,11 @@ LiteApp::LiteApp()
     //m_outputManager->addOutuput(m_logOutput,tr("Console"));
     m_logAct = m_toolWindowManager->addToolWindow(Qt::BottomDockWidgetArea,m_logOutput,"eventlog",tr("Event Log"),true);
     connect(m_logOutput,SIGNAL(dbclickEvent(QTextCursor)),this,SLOT(dbclickLogOutput(QTextCursor)));
-    m_optionAct = m_editorManager->registerBrowser(m_optionManager->browser());
-    //m_viewMenu->addAction(m_optionAct);
+    m_optionAct = new QAction(tr("Options"),this);
+    m_optionAct->setMenuRole(QAction::PreferencesRole);
     m_actionManager->insertViewMenu(LiteApi::ViewMenuBrowserPos,m_optionAct);
-    m_optionManager->setAction(m_optionAct);
+    connect(m_optionAct,SIGNAL(triggered()),m_optionManager,SLOT(exec()));
+
 
     this->appendLog("LiteApp","Initializing");
 
@@ -198,10 +223,8 @@ LiteApp::LiteApp()
 
     m_optionManager->addFactory(m_liteAppOptionFactory);
 
-    m_projectManager->addFactory(new FolderProjectFactory(this,this));
-
-    connect(m_goProxy,SIGNAL(done(QByteArray,QByteArray)),this,SLOT(goproxyDone(QByteArray,QByteArray)));
-    connect(this,SIGNAL(key_escape()),m_mainwindow,SLOT(hideToolWindow()));
+    connect(m_goProxy,SIGNAL(stdoutput(QByteArray)),this,SLOT(goproxyDone(QByteArray)));
+    connect(this,SIGNAL(key_escape()),m_mainwindow,SLOT(hideOutputWindow()));
     connect(m_mainwindow,SIGNAL(fullScreenStateChanged(bool)),m_fullScreent,SLOT(setChecked(bool)));
 }
 
@@ -241,10 +264,13 @@ static QImage makeSplashImage(LiteApi::IApplication *app)
     return image;
 }
 
-void LiteApp::load(bool bUseSession)
+void LiteApp::load(bool bUseSession, IApplication *baseApp)
 {
     QSplashScreen *splash = 0;
     bool bSplash = m_settings->value(LITEAPP_SPLASHVISIBLE,true).toBool();
+    if (baseApp) {
+        bSplash = false;
+    }
     if (bSplash) {
         splash = new QSplashScreen(QPixmap::fromImage(makeSplashImage(this)),Qt::WindowStaysOnTopHint);
     }
@@ -273,9 +299,20 @@ void LiteApp::load(bool bUseSession)
     }
 
     qApp->processEvents();
-
     loadState();
-    m_mainwindow->show();
+    if (baseApp) {
+        if (baseApp->mainWindow()->isMaximized()) {
+            m_mainwindow->resize(800,600);
+            m_mainwindow->show();
+        } else {
+            QRect rc = baseApp->mainWindow()->geometry();
+            rc.adjust(20,20,20,20);
+            m_mainwindow->setGeometry(rc);
+            m_mainwindow->show();
+        }
+    } else {
+        m_mainwindow->show();
+    }
 
     emit loaded();
     m_projectManager->setCurrentProject(0);
@@ -301,7 +338,6 @@ void LiteApp::load(bool bUseSession)
     this->appendLog("DefaultHtmlWidgetFactory",m_htmlWidgetManager->defaultClassName());
 
     m_goProxy->call("version");
-    m_goProxy->call("cmdlist");    
 	
     appendLog("LiteApp","Finished loading");
 }
@@ -326,11 +362,11 @@ void LiteApp::cleanup()
     delete m_htmlWidgetManager;
     delete m_liteAppOptionFactory;
     delete m_fileManager;
-    delete m_actionManager;
     delete m_mimeTypeManager;
     delete m_optionManager;
     delete m_logOutput;
     delete m_toolWindowManager;
+    delete m_actionManager;
     delete m_extension;
     delete m_settings;
 }
@@ -346,11 +382,40 @@ void LiteApp::aboutPlugins()
 
 void LiteApp::escape()
 {
-    emit key_escape();
     IEditor *editor = m_editorManager->currentEditor();
-    if (editor) {
-        editor->onActive();
+    if (!editor) {
+        return;
     }
+    bool bFocus = editor->widget()->isAncestorOf(qApp->focusWidget());
+    if (!bFocus) {
+        editor->onActive();
+    } else {
+        emit key_escape();
+    }
+}
+
+void LiteApp::newWindow()
+{
+    LiteApp::newInstance(0);
+}
+
+void LiteApp::closeWindow()
+{
+    m_mainwindow->close();
+}
+
+void LiteApp::exit()
+{
+    qApp->closeAllWindows();
+}
+
+void LiteApp::applyOption(QString id)
+{
+    if (id != OPTION_LITEAPP) {
+        return;
+    }
+    //bool b = m_settings->value(LITEAPP_OPTNFOLDERINNEWWINDOW,true).toBool();
+    //m_openFolderNewWindowAct->setVisible(!b);
 }
 
 bool LiteApp::hasGoProxy() const
@@ -365,7 +430,7 @@ IGoProxy *LiteApp::createGoProxy(QObject *parent)
 
 IApplication *LiteApp::newInstance(bool loadSession)
 {
-    return LiteApp::NewApplication(loadSession);
+    return LiteApp::NewApplication(loadSession,this);
 }
 
 IEditorManager *LiteApp::editorManager()
@@ -445,7 +510,7 @@ QString LiteApp::storagePath() const
 
 QString LiteApp::ideVersion() const
 {
-    return "X19";
+    return LITEIDE_VERSION;
 }
 
 QString LiteApp::ideFullName() const
@@ -461,12 +526,10 @@ QString LiteApp::ideName() const
 QString LiteApp::ideCopyright() const
 {
     static QString s_info =
-    "2011-2013(c)\n"
+    "2011-2016(c)\n"
     "visualfc@gmail.com\n"
     "\n"
-    "https://code.google.com/p/liteide\n"
-    "https://code.google.com/p/golangide\n"
-    "https://github.com/visualfc/liteide";
+    "https://github.com/visualfc/liteide\n";
     return s_info;
 }
 
@@ -555,11 +618,19 @@ void LiteApp::createActions()
     m_openFolderAct = new QAction(QIcon("icon:images/openfolder.png"),tr("Open Folder..."),m_mainwindow);
     actionContext->regAction(m_openFolderAct,"OpenFolder","");
 
-    m_openFolderNewInstanceAct = new QAction(QIcon("icon:images/openfolder.png"),tr("Open Folder in New Instance..."),m_mainwindow);
-    actionContext->regAction(m_openFolderNewInstanceAct,"OpenFolderNewInstance","");
+    m_openFolderNewWindowAct = new QAction(QIcon("icon:images/openfolder.png"),tr("Open Folder in New Window..."),m_mainwindow);
+    //bool b = m_settings->value(LITEAPP_OPTNFOLDERINNEWWINDOW,true).toBool();
+    //m_openFolderNewWindowAct->setVisible(!b);
+    actionContext->regAction(m_openFolderNewWindowAct,"OpenFolderNewWindow","");
 
-    m_newInstance = new QAction(tr("New Instance"),m_mainwindow);
-    actionContext->regAction(m_newInstance,"NewInstance","");
+    m_closeAllFolderAct = new QAction(tr("Close All Folders"),m_mainwindow);
+    actionContext->regAction(m_closeAllFolderAct,"CloseAllFolders","");
+
+    m_newWindow = new QAction(tr("New Window"),m_mainwindow);
+    actionContext->regAction(m_newWindow,"NewWindow","Ctrl+Shift+N");
+
+    m_closeWindow = new QAction(tr("Close Window"),m_mainwindow);
+    actionContext->regAction(m_closeWindow,"CloseWindow","Ctrl+Shift+W");
 
     m_closeAct = new QAction(QIcon("icon:images/close.png"),tr("Close File"),m_mainwindow);
     actionContext->regAction(m_closeAct,"CloseFile","Ctrl+W");
@@ -571,8 +642,8 @@ void LiteApp::createActions()
 
     m_saveProjectAct = new QAction(QIcon("icon:images/saveproject.png"),tr("Save Project"),m_mainwindow);
 
-    m_closeProjectAct = new QAction(QIcon("icon:images/closeproject.png"),tr("Close Folders"),m_mainwindow);
-    actionContext->regAction(m_closeProjectAct,"CloseFolders","");
+    m_closeProjectAct = new QAction(QIcon("icon:images/closeproject.png"),tr("Close Project"),m_mainwindow);
+    actionContext->regAction(m_closeProjectAct,"CloseProject","");
 
     m_saveAct = new QAction(QIcon("icon:images/save.png"),tr("Save File"),m_mainwindow);
     actionContext->regAction(m_saveAct,"SaveFile",QKeySequence::Save);
@@ -591,16 +662,24 @@ void LiteApp::createActions()
     actionContext->regAction(m_fullScreent,"FullScreen","Ctrl+Shift+F11");
 
     m_aboutAct = new QAction(tr("About LiteIDE"),m_mainwindow);
+#if defined(Q_OS_OSX)
+    m_aboutAct->setMenuRole(QAction::AboutRole);
+#endif
     actionContext->regAction(m_aboutAct,"About","");
 
     m_aboutPluginsAct = new QAction(tr("About Plugins"),m_mainwindow);
+#if defined(Q_OS_OSX)
+    m_aboutPluginsAct->setMenuRole(QAction::ApplicationSpecificRole);
+#endif
     actionContext->regAction(m_aboutPluginsAct,"AboutPlugins","");
 
     connect(m_newAct,SIGNAL(triggered()),m_fileManager,SLOT(newFile()));
     connect(m_openFileAct,SIGNAL(triggered()),m_fileManager,SLOT(openFiles()));
     connect(m_openFolderAct,SIGNAL(triggered()),m_fileManager,SLOT(openFolder()));
-    connect(m_openFolderNewInstanceAct,SIGNAL(triggered()),m_fileManager,SLOT(openFolderNewInstance()));
-    connect(m_newInstance,SIGNAL(triggered()),m_fileManager,SLOT(newInstance()));
+    connect(m_openFolderNewWindowAct,SIGNAL(triggered()),m_fileManager,SLOT(openFolderNewWindow()));
+    connect(m_closeAllFolderAct,SIGNAL(triggered()),m_fileManager,SLOT(closeAllFolders()));
+    connect(m_newWindow,SIGNAL(triggered()),this,SLOT(newWindow()));
+    connect(m_closeWindow,SIGNAL(triggered()),this,SLOT(closeWindow()));
     connect(m_closeAct,SIGNAL(triggered()),m_editorManager,SLOT(closeEditor()));
     connect(m_closeAllAct,SIGNAL(triggered()),m_editorManager,SLOT(closeAllEditors()));
     connect(m_openProjectAct,SIGNAL(triggered()),m_fileManager,SLOT(openProjects()));
@@ -609,7 +688,7 @@ void LiteApp::createActions()
     connect(m_saveAct,SIGNAL(triggered()),m_editorManager,SLOT(saveEditor()));
     connect(m_saveAsAct,SIGNAL(triggered()),m_editorManager,SLOT(saveEditorAs()));
     connect(m_saveAllAct,SIGNAL(triggered()),m_editorManager,SLOT(saveAllEditors()));
-    connect(m_exitAct,SIGNAL(triggered()),m_mainwindow,SLOT(close()));
+    connect(m_exitAct,SIGNAL(triggered()),this,SLOT(exit()));
     connect(m_aboutAct,SIGNAL(triggered()),m_mainwindow,SLOT(about()));
     connect(m_aboutPluginsAct,SIGNAL(triggered()),this,SLOT(aboutPlugins()));
     connect(m_fullScreent,SIGNAL(toggled(bool)),m_mainwindow,SLOT(setFullScreen(bool)));
@@ -623,18 +702,20 @@ void LiteApp::createMenus()
 
     m_fileMenu->addAction(m_newAct);
     m_fileMenu->addAction(m_openFileAct);
-    m_fileMenu->addAction(m_closeAct);
-    m_fileMenu->addAction(m_closeAllAct);
+    m_fileMenu->addAction(m_openFolderAct);
+    m_fileMenu->addAction(m_openFolderNewWindowAct);
     m_fileMenu->addSeparator();
     m_fileMenu->addAction(m_saveAct);
     m_fileMenu->addAction(m_saveAsAct);
     m_fileMenu->addAction(m_saveAllAct);
     m_fileMenu->addSeparator();
-    m_fileMenu->addAction(m_newInstance);
+    m_fileMenu->addAction(m_newWindow);
+    m_fileMenu->addAction(m_closeWindow);
     m_fileMenu->addSeparator();
-    m_fileMenu->addAction(m_openFolderAct);
-    m_fileMenu->addAction(m_openFolderNewInstanceAct);
-    m_fileMenu->addAction(m_closeProjectAct);
+    m_fileMenu->addAction(m_closeAct);
+    m_fileMenu->addAction(m_closeAllAct);
+    m_fileMenu->addAction(m_closeAllFolderAct);
+    //m_fileMenu->addAction(m_closeProjectAct);
     //m_fileMenu->addAction(m_openProjectAct);
     //m_fileMenu->addAction(m_saveProjectAct);
     m_fileMenu->addSeparator();
@@ -722,7 +803,7 @@ void LiteApp::loadState()
     if (!geometry.isEmpty()) {
         m_mainwindow->restoreGeometry(geometry);
     } else {
-        m_mainwindow->resize(640,480);
+        m_mainwindow->resize(800,600);
     }
     m_mainwindow->restoreState(m_settings->value("liteapp/state").toByteArray());
 }
@@ -731,7 +812,6 @@ void LiteApp::saveState()
 {
     m_settings->setValue("liteapp/geometry",m_mainwindow->saveGeometry());
     m_settings->setValue("liteapp/state",m_mainwindow->saveState());
-    m_settings->setValue("liteapp/toolState",m_mainwindow->saveToolState());
 }
 
 
@@ -742,6 +822,14 @@ void LiteApp::loadSession(const QString &name)
     QString scheme = m_settings->value(session+"_scheme").toString();
     QString editorName = m_settings->value(session+"_cureditor").toString();
     QStringList fileList = m_settings->value(session+"_alleditor").toStringList();
+    QStringList folderList = m_settings->value(session+"_folderList").toStringList();
+
+    if (m_settings->value(LITEAPP_STARTUPRELOADFOLDERS,true).toBool()) {
+        m_fileManager->setFolderList(folderList);
+        if (!folderList.isEmpty()) {
+
+        }
+    }
 
     if (!projectName.isEmpty()) {
         if (scheme.isEmpty()) {
@@ -753,13 +841,15 @@ void LiteApp::loadSession(const QString &name)
         m_projectManager->closeProject();
     }
 
-    foreach(QString fileName, fileList) {
-        m_fileManager->openEditor(fileName,false);
-    }
-    if (!editorName.isEmpty()) {
-        m_fileManager->openEditor(editorName,true);
-    } else if (!fileList.isEmpty()){
-        m_fileManager->openEditor(fileList.last(),true);
+    if (m_settings->value(LITEAPP_STARTUPRELOADFILES,true).toBool()) {
+        foreach(QString fileName, fileList) {
+            m_fileManager->openEditor(fileName,false);
+        }
+        if (!editorName.isEmpty()) {
+            m_fileManager->openEditor(editorName,true);
+        } else if (!fileList.isEmpty()){
+            m_fileManager->openEditor(fileList.last(),true);
+        }
     }
 }
 
@@ -779,9 +869,6 @@ void LiteApp::saveSession(const QString &name)
 
     QStringList fileList;
     foreach (IEditor* ed,m_editorManager->sortedEditorList()) {
-//        if (ed->mimeType().indexOf("liteide/") == 0) {
-//            continue;
-//        }
         if (ed->filePath().isEmpty()) {
             continue;
         }
@@ -796,6 +883,7 @@ void LiteApp::saveSession(const QString &name)
     m_settings->setValue(session+"_scheme",scheme);
     m_settings->setValue(session+"_cureditor",editorName);
     m_settings->setValue(session+"_alleditor",fileList);
+    m_settings->setValue(session+"_folderList",m_fileManager->folderList());
 }
 
 void LiteApp::dbclickLogOutput(QTextCursor cur)
@@ -818,15 +906,14 @@ void LiteApp::dbclickLogOutput(QTextCursor cur)
 
     LiteApi::IEditor *editor = m_fileManager->openEditor(fileName);
     if (editor) {
-        editor->widget()->setFocus();
-        LiteApi::ITextEditor *textEditor = LiteApi::findExtensionObject<LiteApi::ITextEditor*>(editor,"LiteApi.ITextEditor");
+        LiteApi::ITextEditor *textEditor =  LiteApi::getTextEditor(editor);
         if (textEditor) {
             textEditor->gotoLine(line-1,0,true);
         }
     }
 }
 
-void LiteApp::goproxyDone(const QByteArray &id, const QByteArray &reply)
+void LiteApp::goproxyDone(const QByteArray &reply)
 {
-    this->appendLog("GoProxy",QString("%1 = %2").arg(QString::fromUtf8(id)).arg(QString::fromUtf8(reply)));
+    this->appendLog("GoProxy",QString("%1 = %2").arg(QString::fromUtf8(m_goProxy->commandId())).arg(QString::fromUtf8(reply).trimmed()));
 }

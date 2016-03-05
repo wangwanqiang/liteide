@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -21,6 +21,7 @@
 // Module: htmlpreview.cpp
 // Creator: visualfc <visualfc@gmail.com>
 
+#include "markdown_global.h"
 #include "htmlpreview.h"
 #include "sundown/mdtohtml.h"
 #include <QScrollBar>
@@ -37,6 +38,7 @@
 #include <QFileDialog>
 #include <QStatusBar>
 #include <QToolTip>
+#include <QTimer>
 #ifndef QT_NO_PRINTER
 #include <QPrinter>
 #include <QPrintPreviewDialog>
@@ -62,6 +64,10 @@ HtmlPreview::HtmlPreview(LiteApi::IApplication *app,QObject *parent) :
     m_htmlWidget = 0;
     m_bWebkit = false;
 
+    m_htmlUpdateTimer = new QTimer(this);
+    m_htmlUpdateTimer->setSingleShot(true);
+    m_htmlUpdateTimer->setInterval(500);
+
     m_cssMenu = new QMenu(tr("Page Style"));
     m_cssMenu->setIcon(QIcon("icon:/markdown/images/css.png"));
 
@@ -73,24 +79,21 @@ HtmlPreview::HtmlPreview(LiteApi::IApplication *app,QObject *parent) :
     m_printPreviewAct = new QAction(QIcon("icon:liteeditor/images/fileprintpreview.png"),tr("Print Preview"),this);
     m_printPreviewAct->setVisible(false);
 
-    m_configAct = new QAction(QIcon("icon:markdown/images/config.png"),tr("Configuration"),this);
-
-
     m_syncScrollAct = new QAction(tr("Synchronize preview and code scrollbars"),this);
     m_syncScrollAct->setCheckable(true);
 
     m_syncSwitchAct = new QAction(tr("Automatically display preview"),this);
     m_syncSwitchAct->setCheckable(true);
 
-    m_configMenu = new QMenu(m_widget);
+    m_configMenu = new QMenu(tr("Config"),m_widget);
+    m_configMenu->setIcon(QIcon("icon:markdown/images/config.png"));
     m_configMenu->addAction(m_syncSwitchAct);
     m_configMenu->addAction(m_syncScrollAct);
-    m_configAct->setMenu(m_configMenu);
 
     QList<QAction*> actions;
     actions << m_configMenu->menuAction() << m_reloadAct << m_exportHtmlAct << m_exportPdfAct << m_printPreviewAct << m_cssMenu->menuAction();
 
-    m_toolAct = m_liteApp->toolWindowManager()->addToolWindow(Qt::RightDockWidgetArea,
+    m_toolAct = m_liteApp->toolWindowManager()->addToolWindow(Qt::BottomDockWidgetArea,
                                                   m_widget,
                                                   QString("HtmlPreview"),
                                                   QString(tr("HTML Preview")),
@@ -108,21 +111,26 @@ HtmlPreview::HtmlPreview(LiteApi::IApplication *app,QObject *parent) :
     connect(m_syncSwitchAct,SIGNAL(toggled(bool)),this,SLOT(toggledSyncSwitch(bool)));
     connect(m_syncScrollAct,SIGNAL(toggled(bool)),this,SLOT(toggledSyncScroll(bool)));
     connect(m_reloadAct,SIGNAL(triggered()),this,SLOT(reload()));
+    connect(m_htmlUpdateTimer,SIGNAL(timeout()),this,SLOT(htmlUpdate()));
 
-    m_syncScrollAct->setChecked(m_liteApp->settings()->value("markdown/syncscroll",true).toBool());
-    m_syncSwitchAct->setChecked(m_liteApp->settings()->value("markdown/syncswitch",true).toBool());
+    m_syncScrollAct->setChecked(m_liteApp->settings()->value(MARKDOWN_SYNCSCROLLHTML,true).toBool());
+    m_syncSwitchAct->setChecked(m_liteApp->settings()->value(MARKDOWN_SYNCVIEWHTML,false).toBool());
 }
 
 HtmlPreview::~HtmlPreview()
 {
+    delete m_htmlUpdateTimer;
     QAction *act = m_cssActGroup->checkedAction();
     if (act != 0) {
         m_liteApp->settings()->setValue("markdown/css",act->text());
     }
-    m_liteApp->settings()->setValue("markdown/syncscroll",m_syncScrollAct->isChecked());
-    m_liteApp->settings()->setValue("markdown/syncswitch",m_syncSwitchAct->isChecked());
+    m_liteApp->settings()->setValue(MARKDOWN_SYNCSCROLLHTML,m_syncScrollAct->isChecked());
+    m_liteApp->settings()->setValue(MARKDOWN_SYNCVIEWHTML,m_syncSwitchAct->isChecked());
     delete m_configMenu;
     delete m_cssMenu;
+    if (m_widget) {
+        delete m_widget;
+    }
 }
 
 static QByteArray defcss_data =
@@ -152,7 +160,8 @@ void HtmlPreview::appLoaded()
         m_bWebkit = false;
     }
 
-    connect(m_htmlWidget,SIGNAL(loadFinished(bool)),this,SLOT(loadFinished(bool)));
+    //connect(m_htmlWidget,SIGNAL(loadFinished(bool)),this,SLOT(loadFinished(bool)));
+    connect(m_htmlWidget,SIGNAL(contentsSizeChanged()),this,SLOT(htmlContentsSizeChanged()));
     connect(m_htmlWidget,SIGNAL(linkClicked(QUrl)),this,SLOT(linkClicked(QUrl)));
     connect(m_htmlWidget,SIGNAL(linkHovered(QUrl)),this,SLOT(linkHovered(QUrl)));
 
@@ -164,7 +173,7 @@ void HtmlPreview::appLoaded()
     sep->setSeparator(true);
     m_cssActGroup->addAction(sep);
 
-    QFile file(m_liteApp->resourcePath()+"/markdown/export.html");
+    QFile file(m_liteApp->resourcePath()+"/packages/markdown/export.html");
     if (file.open(QFile::ReadOnly)) {
         m_exportOrgTemple = file.readAll();
     } else {
@@ -177,7 +186,7 @@ void HtmlPreview::appLoaded()
     QString defcss;
 
     if (m_bWebkit) {
-        QDir dir(m_liteApp->resourcePath()+"/markdown/css");
+        QDir dir(m_liteApp->resourcePath()+"/packages/markdown/css");
         foreach (QFileInfo info, dir.entryInfoList(QStringList()<<"*.css",QDir::Files)) {
             QAction *act = new QAction(info.fileName(),this);
             act->setCheckable(true);
@@ -260,6 +269,11 @@ void HtmlPreview::currentEditorChanged(LiteApi::IEditor *editor)
 
 void HtmlPreview::contentsChanged()
 {
+    m_htmlUpdateTimer->start();
+}
+
+void HtmlPreview::htmlUpdate()
+{
     editorHtmlPrivew();
 }
 
@@ -319,10 +333,9 @@ void HtmlPreview::loadHtmlData(const QByteArray &data, const QByteArray &title, 
 {
     m_lastData = data;
 
-    int h = m_htmlWidget->scrollBarValue(Qt::Horizontal);
-    int v = m_htmlWidget->scrollBarValue(Qt::Vertical);
-    m_prevPos = QPoint(h,v);
-
+//    int h = m_htmlWidget->scrollBarValue(Qt::Horizontal);
+//    int v = m_htmlWidget->scrollBarValue(Qt::Vertical);
+//    m_prevPos = QPoint(h,v);
     if (mime == "text/html") {
         QTextCodec *codec = QTextCodec::codecForHtml(data,QTextCodec::codecForName("utf-8"));
         m_htmlWidget->setHtml(codec->toUnicode(data),QUrl::fromLocalFile(m_curEditor->filePath()));
@@ -438,7 +451,7 @@ void HtmlPreview::cssTtriggered(QAction *act)
         if (!m_bWebkit) {
             fileName = ":/markdown/css/"+act->text();
         } else {
-            fileName = m_liteApp->resourcePath()+"/markdown/css/"+act->text();
+            fileName = m_liteApp->resourcePath()+"/packages/markdown/css/"+act->text();
         }
         cssData = this->loadCssData(fileName);
     }
@@ -486,4 +499,9 @@ void HtmlPreview::loadFinished(bool b)
         m_htmlWidget->setScrollBarValue(Qt::Horizontal,m_prevPos.x());
         m_htmlWidget->setScrollBarValue(Qt::Vertical,m_prevPos.y());
     }
+}
+
+void HtmlPreview::htmlContentsSizeChanged()
+{
+    this->syncScrollValue();
 }

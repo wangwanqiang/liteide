@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -44,6 +44,14 @@ WebViewHtmlWidget::WebViewHtmlWidget(QObject *parent) :
     connect(m_widget,SIGNAL(linkClicked(QUrl)),this,SIGNAL(linkClicked(QUrl)));
     connect(m_widget->page(),SIGNAL(linkHovered(QString,QString,QString)),this,SLOT(webLinkHovered(QString,QString,QString)));
     connect(m_widget->page(),SIGNAL(loadFinished(bool)),this,SIGNAL(loadFinished(bool)));
+    connect(m_widget->page()->mainFrame(),SIGNAL(contentsSizeChanged(QSize)),this,SIGNAL(contentsSizeChanged()));
+}
+
+WebViewHtmlWidget::~WebViewHtmlWidget()
+{
+ //   if (m_widget) {
+ //       delete m_widget;
+ //   }
 }
 
 QWidget *WebViewHtmlWidget::widget() const
@@ -78,6 +86,7 @@ void WebViewHtmlWidget::clear()
 void WebViewHtmlWidget::scrollToAnchor(const QString &anchor)
 {
     m_widget->page()->mainFrame()->scrollToAnchor(anchor);
+    emit anchorChanged(anchor);
 }
 
 void WebViewHtmlWidget::setScrollBarValue(Qt::Orientation orientation, int value)

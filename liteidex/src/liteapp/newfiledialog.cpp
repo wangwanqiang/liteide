@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -33,6 +33,7 @@
 #include <QTextCodec>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QDateTime>
 #include <QDebug>
 //lite_memory_check_begin
 #if defined(WIN32) && defined(_MSC_VER) &&  defined(_DEBUG)
@@ -135,9 +136,16 @@ void NewFileDialog::accept()
         }
     }
 
+    static const char * const shortMonthNames[] = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 
-    m_stringMap.clear();
-    m_stringMap.insert("$ROOT$",QFileInfo(name).fileName());
+    m_stringMap.clear();    
+    m_stringMap.insert("$ROOT$",QFileInfo(name).fileName());    
+    QDate dt = QDate::currentDate();
+    QTime tm = QTime::currentTime();
+    m_stringMap.insert("$DATE$", QString("%1 %2 %3").arg(dt.day()).arg(shortMonthNames[dt.month()-1]).arg(dt.year()));
+    m_stringMap.insert("$DATETIME$",QString("%1 %2 %3 %4").arg(tm.toString("hh:mm")).arg(dt.day()).arg(shortMonthNames[dt.month()-1]).arg(dt.year()));
     m_openFiles.clear();
 
     m_openPath = location;

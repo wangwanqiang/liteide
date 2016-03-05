@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -58,6 +58,7 @@ WelcomeBrowser::WelcomeBrowser(LiteApi::IApplication *app, QObject *parent)
     m_browser->toolBar()->hide();
 
     QVBoxLayout *mainLayout = new QVBoxLayout;
+    mainLayout->setMargin(0);
 
     mainLayout->addWidget(m_browser->widget());
 
@@ -86,14 +87,16 @@ WelcomeBrowser::WelcomeBrowser(LiteApi::IApplication *app, QObject *parent)
     connect(m_liteApp->fileManager(),SIGNAL(recentFilesChanged(QString)),this,SLOT(loadData()));
     connect(m_browser,SIGNAL(linkHovered(QUrl)),this,SLOT(highlightedUrl(QUrl)));
 
-    m_browser->setSearchPaths(QStringList() << m_liteApp->resourcePath()+"/welcome");
+    QStringList paths;
+    paths << m_liteApp->resourcePath()+"/welcome" << LiteDoc::localePath(m_liteApp->resourcePath()+"/welcome");
+    m_browser->setSearchPaths(paths);
 
     m_extension->addObject("LiteApi.QTextBrowser",m_browser->htmlWidget()->widget());
 
-    QString path = m_liteApp->resourcePath()+"/welcome/welcome.html";
+    QString path = LiteDoc::localeFile(m_liteApp->resourcePath()+"/welcome/welcome.html");
     QFile file(path);
     if (file.open(QIODevice::ReadOnly)) {
-        m_templateData = file.readAll();
+        m_templateData = QString::fromUtf8(file.readAll());
         file.close();
     }
     loadData();
@@ -120,7 +123,7 @@ LiteApi::IExtension *WelcomeBrowser::extension()
 
 void WelcomeBrowser::highlightedUrl(const QUrl &url)
 {
-    m_liteApp->mainWindow()->statusBar()->showMessage(url.toString());
+    m_liteApp->mainWindow()->statusBar()->showMessage(url.toString(),2000);
 }
 
 void WelcomeBrowser::openUrl(const QUrl &url)
@@ -138,7 +141,7 @@ void WelcomeBrowser::openUrl(const QUrl &url)
     } else if (url.scheme() == "file") {
         m_liteApp->fileManager()->openEditor(url.path());
     } else if (url.scheme() == "folder") {
-        m_liteApp->fileManager()->openFolderProject(url.path());
+        m_liteApp->fileManager()->addFolderList(url.path());
     }else if (url.scheme() == "doc") {
         LiteApi::ILiteDoc *doc = LiteApi::findExtensionObject<LiteApi::ILiteDoc*>(m_liteApp,"LiteApi.ILiteDoc");
         if (doc) {
@@ -196,10 +199,9 @@ void WelcomeBrowser::loadData()
         list.append("</ul>");
         list.append("</td></tr></table>");
     }
-
+    data.replace("{liteide_version}",m_liteApp->ideVersion());
     data.replace("{recent_sessions}",sessionList.join("\n"));
     data.replace("{recent_files}",list.join("\n"));
-
     QUrl url(m_liteApp->resourcePath()+"/welcome/welcome.html");
     m_browser->setUrlHtml(url,data);
 }

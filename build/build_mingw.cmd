@@ -5,7 +5,7 @@ setlocal
 set BUILD_ROOT=%CD%
 if x%LITEIDE_ROOT%==x set LITEIDE_ROOT=%CD%\..\liteidex
 
-echo build liteide 
+echo build liteide
 echo QTDIR=%QTDIR%
 echo GOROOT=%GOROOT%
 echo BUILD_ROOT=%BUILD_ROOT%
@@ -38,18 +38,18 @@ echo build liteide tools
 echo .
 
 cd %LITEIDE_ROOT%
-set GOPATH=%CD%;%GOPATH%
 
-REM cd src\liteidex
-REM windres -o liteide-res.syso liteide.rc
-REM go install -ldflags "-s -H windowsgui" -v liteidex
-REM del liteide-res.syso
-REM cd ..\..
+if defined %GOPATH (
+	set GOPATH=%CD%;%GOPATH%
+) else (
+	set GOPATH=%CD%
+)
 
-go install -ldflags "-s" -v tools/goastview
-go install -ldflags "-s" -v tools/godocview
-go install -ldflags "-s" -v tools/goexec
-go install -ldflags "-s" -v tools/goapi
+go install -ldflags "-s" -v github.com/visualfc/gotools
+if ERRORLEVEL 1 goto go_fail
+
+go install -ldflags "-s" -v github.com/nsf/gocode
+if ERRORLEVEL 1 goto go_fail
 
 cd %BUILD_ROOT%
 
@@ -70,11 +70,12 @@ xcopy %LITEIDE_ROOT%\..\README.MD liteide /y
 xcopy %LITEIDE_ROOT%\..\CONTRIBUTORS liteide /y
 
 xcopy %LITEIDE_ROOT%\liteide\bin\* liteide\bin /y
-xcopy %LITEIDE_ROOT%\bin\* liteide\bin /y
+xcopy %LITEIDE_ROOT%\bin\gotools.exe liteide\bin /y
+xcopy %LITEIDE_ROOT%\bin\gocode.exe liteide\bin /y
 xcopy %LITEIDE_ROOT%\liteide\lib\liteide\plugins\*.dll liteide\lib\liteide\plugins /y
 
-xcopy %LITEIDE_ROOT%\deploy liteide\share\liteide /e /y /i 
-xcopy %LITEIDE_ROOT%\os_deploy\windows liteide\share\liteide  /e /y /i 
+xcopy %LITEIDE_ROOT%\deploy liteide\share\liteide /e /y /i
+xcopy %LITEIDE_ROOT%\os_deploy\windows liteide\share\liteide  /e /y /i
 
 goto end
 

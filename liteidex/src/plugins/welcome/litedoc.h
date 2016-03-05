@@ -1,7 +1,7 @@
 /**************************************************************************
 ** This file is part of LiteIDE
 **
-** Copyright (c) 2011-2013 LiteIDE Team. All rights reserved.
+** Copyright (c) 2011-2016 LiteIDE Team. All rights reserved.
 **
 ** This library is free software; you can redistribute it and/or
 ** modify it under the terms of the GNU Lesser General Public
@@ -49,6 +49,8 @@ class LiteDoc : public LiteApi::ILiteDoc
     Q_OBJECT
 public:
     explicit LiteDoc(LiteApi::IApplication *app, QObject *parent = 0);
+    static QString localeFile(const QString &fileName);
+    static QString localePath(const QString &path);
     virtual void activeBrowser();
 public slots:
     virtual void openUrl(const QUrl &url);
